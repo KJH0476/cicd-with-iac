@@ -1,0 +1,42 @@
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: health_check
+          uri: no://op
+          predicates:
+            - Path=/health
+        - id: pass_user_service
+          uri: ${USER_SERVICE_URI}
+          predicates:
+            - Path=/pass/**
+          filters:
+            - StripPrefix=1
+        - id: user_service
+          uri: ${USER_SERVICE_URI}
+          predicates:
+            - Path=/user/**
+          filters:
+            - StripPrefix=1
+            - name: AuthorizationFilter
+              args:
+                allowedRoles:
+                  - USER
+                  - ADMIN
+        - id: search_service
+          uri: ${SEARCH_SERVICE_URI}
+          predicates:
+            - Path=/search/**
+          filters:
+            - StripPrefix=1
+        - id: reservation_service
+          uri: ${RESERVATION_SERVICE_URI}
+          predicates:
+            - Path=/reservation/**
+          filters:
+            - StripPrefix=1
+            - name: AuthorizationFilter
+              args:
+                allowedRoles:
+                  - USER
+                  - ADMIN

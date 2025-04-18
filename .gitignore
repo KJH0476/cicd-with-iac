@@ -1,0 +1,8 @@
+.DS_Store
+.idea
+.git
+.terraform
+*.tfstate
+*.tfstate.backup
+#*.tfvars
+#bastion_ssh_key
