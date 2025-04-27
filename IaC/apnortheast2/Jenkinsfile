@@ -25,7 +25,8 @@ pipeline {
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
                     script {
-                        def path = "IaC/${env.REGION}/env/${env.ENV_NAME}"
+                        def shortRegion = env.REGION.replaceAll('-', '')
+                        def path = "IaC/${shortRegion}/env/${env.ENV_NAME}"
                         dir(path) {
                             sh 'terraform fmt -recursive'
                             sh 'terraform init -input=false'

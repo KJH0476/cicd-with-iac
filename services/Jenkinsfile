@@ -81,7 +81,8 @@ pipeline {
                     regions.each { region ->
                         def regionPrefix = regionMap[region]
                         def devRepo = "dev-${regionPrefix}-ecr-repo"
-                        dir("IaC/${region}/env/dev") {
+                        def shortRegion = region.replaceAll('-', '')
+                        dir("IaC/${shortRegion}/env/dev") {
                             // terraform.tfvars 바로 수정
                             sh """
                                 sed -E -i '/^${env.SERVICE_NAME}[A-Za-z0-9_]*\\s*=\\s*{/,/}/ \
@@ -161,6 +162,7 @@ pipeline {
                             def regionPrefix = regionMap[region]
                             def devRepo  = "dev-${regionPrefix}-ecr-repo"
                             def prodRepo = "prod-${regionPrefix}-ecr-repo"
+                            def shortRegion = region.replaceAll('-', '')
 
                             sh """
                                 aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${region}.amazonaws.com
@@ -168,7 +170,7 @@ pipeline {
                                 docker push ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${prodRepo}:${env.IMAGE_TAG}
                             """
 
-                            dir("IaC/${region}/env/prod") {
+                            dir("IaC/${shortRegion}/env/prod") {
                                 // terraform.tfvars 바로 수정
                                 sh """
                                     sed -E -i '/^${env.SERVICE_NAME}[A-Za-z0-9_]*\\s*=\\s*{/,/}/ \
