@@ -1,0 +1,231 @@
+pipeline {
+    agent any
+    parameters {
+        choice(
+                name: 'REGION',
+                choices: ['ap-northeast-2', 'us-east-1'],
+                description: 'AWS 리전을 선택하세요.'
+        )
+    }
+    environment {
+        GIT_CREDENTIAL_ID = '0362778c-564c-43d8-9c25-c32d4deeffb2'
+        AWS_CREDENTIALS_ID = 'AWS_CREDENTIALS'
+        SLACK_CHANNEL = '#jenkins-알림'
+    }
+
+    stages {
+        stage('준비') {
+            steps {
+                checkout scm
+                echo "▶ BRANCH=${env.BRANCH_NAME}, REGION=${params.REGION}, JOB_NAME=${env.JOB_NAME}"
+                script {
+                    def ts = new Date().format('yyyyMMdd-HHmmss')
+                    env.SERVICE_NAME = "${env.JOB_NAME.split('/')[0]}"
+                    env.IMAGE_TAG = "${env.SERVICE_NAME}-${ts}"
+                    env.TARGET_REGIONS = (params.REGION == 'all') ? 'ap-northeast-2,us-east-1' : params.REGION
+                    env.DOCKERFILE_PATH = "services/${env.SERVICE_NAME}"
+                }
+                echo "이미지 태그: ${env.IMAGE_TAG}"
+                echo "대상 리전: ${env.TARGET_REGIONS}"
+            }
+        }
+        stage('이미지 빌드 및 ECR 푸시') {
+            when {
+                expression { env.BRANCH_NAME == 'develop' }
+            }
+            steps {
+                // ECR 로그인
+                withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: "${env.AWS_CREDENTIALS_ID}",
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    string(credentialsId: 'AWS_ID', variable: 'aws_account_id')
+                ]) {
+                    script {
+                        env.AWS_ACCOUNT_ID = "${aws_account_id}"
+                        def regions = (params.REGION == 'all') ? ['ap-northeast-2', 'us-east-1'] : [params.REGION]
+                        def regionMap = ['ap-northeast-2': 'apn2', 'us-east-1': 'use1']
+
+                        def parts = env.SERVICE_NAME.split('_')
+                        def dockerfilePath = []
+                        for(p in parts) {
+                            def lower = p.toLowerCase()
+                            def path = lower[0].toUpperCase()+lower.substring(1)
+                            dockerfilePath.add(path)
+                        }
+                        def folderName = dockerfilePath.join('')
+                        regions.each{ region ->
+                            def regionPrefix = regionMap[region]
+                            def devRepo = "dev-${regionPrefix}-ecr-repo"
+                            sh """
+                               aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${region}.amazonaws.com
+                            """
+
+                            sh "docker build --platform linux/amd64 -t ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:${env.IMAGE_TAG} ./services/${folderName}"
+                            sh "docker push ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:${env.IMAGE_TAG}"
+                        }
+                    }
+                }
+            }
+        }
+        stage('dev tfvars 업데이트 및 develop 브랜치에 커밋') {
+            when {
+                expression { env.BRANCH_NAME == 'develop' }
+            }
+            steps {
+                script {
+                    def regions = (params.REGION == 'all') ? ['ap-northeast-2', 'us-east-1'] : [params.REGION]
+                    def regionMap = ['ap-northeast-2': 'apn2', 'us-east-1': 'use1']
+                    regions.each { region ->
+                        def regionPrefix = regionMap[region]
+                        def devRepo = "dev-${regionPrefix}-ecr-repo"
+                        dir("IaC/${region}/env/dev") {
+                            // terraform.tfvars 바로 수정
+                            sh """
+                                sed -E -i '/^${env.SERVICE_NAME}[A-Za-z0-9_]*\\s*=\\s*{/,/}/ \
+                                  s#^\\s*image_uri\\s*=.*#image_uri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${region}.amazonaws.com/${devRepo}:${env.IMAGE_TAG}"#' \
+                                  terraform.tfvars
+                            """
+                            sh "git add terraform.tfvars"
+                        }
+                    }
+                    echo "▶ Dev 배포 태그: ${env.IMAGE_TAG}"
+
+                    withCredentials([
+                            usernamePassword(credentialsId: "${env.GIT_CREDENTIAL_ID}", passwordVariable: 'git_password', usernameVariable: 'git_username'),
+                            string(credentialsId: 'GITHUB_EMAIL', variable: 'git_email')
+                    ]) {
+                        sh '''
+                            git config user.email "$git_email"
+                            git config user.name "$git_username"
+                            git commit -m "🚀[CI▸CD] update dev tfvars for <$TARGET_REGIONS>" || echo "No Changes"
+                            git push https://$git_username:$git_password@github.com/KJH0476/cicd-with-iac.git develop
+                        '''
+                    }
+                }
+            }
+        }
+        stage('dev 이미지 테스트 완료 및 승인') {
+            when {
+                expression { env.BRANCH_NAME == 'develop' }
+            }
+            steps {
+                input message: """
+                - 테스트할 이미지 태그 : ${env.IMAGE_TAG}
+                테스트 완료 시 candidate 태그로 푸시됩니다.
+                """
+                withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: "${env.AWS_CREDENTIALS_ID}",
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    string(credentialsId: 'AWS_ID', variable: 'aws_account_id')
+                ]) {
+                    script {
+                        def regions = (params.REGION == 'all') ? ['ap-northeast-2', 'us-east-1'] : [params.REGION]
+                        def regionMap = ['ap-northeast-2': 'apn2', 'us-east-1': 'use1']
+                        regions.each{ region ->
+                            def regionPrefix = regionMap[region]
+                            def devRepo = "dev-${regionPrefix}-ecr-repo"
+                            sh """
+                               aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${region}.amazonaws.com
+                            """
+
+                            sh "docker tag ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:${env.IMAGE_TAG} ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:candidate"
+                            sh "docker push ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:candidate"
+                        }
+                    }
+                }
+            }
+        }
+        stage('prod tfvars 업데이트 및 main 브랜치에 커밋') {
+            when {
+                expression { env.BRANCH_NAME == 'main' }
+            }
+            steps {
+                withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: "${env.AWS_CREDENTIALS_ID}",
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    string(credentialsId: 'AWS_ID', variable: 'aws_account_id')
+                ]) {
+                    script {
+                        def regions = (params.REGION == 'all') ? ['ap-northeast-2', 'us-east-1'] : [params.REGION]
+                        def regionMap = ['ap-northeast-2': 'apn2', 'us-east-1': 'use1']
+                        regions.each { region ->
+                            def regionPrefix = regionMap[region]
+                            def devRepo  = "dev-${regionPrefix}-ecr-repo"
+                            def prodRepo = "prod-${regionPrefix}-ecr-repo"
+
+                            sh """
+                                aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${region}.amazonaws.com
+                                docker tag ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:candidate ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${prodRepo}:${env.IMAGE_TAG}
+                                docker push ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${prodRepo}:${env.IMAGE_TAG}
+                            """
+
+                            dir("IaC/${region}/env/prod") {
+                                // terraform.tfvars 바로 수정
+                                sh """
+                                    sed -E -i '/^${env.SERVICE_NAME}[A-Za-z0-9_]*\\s*=\\s*{/,/}/ \
+                                      s#^\\s*image_uri\\s*=.*#image_uri = "${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${prodRepo}:${env.IMAGE_TAG}"#' \
+                                      terraform.tfvars
+                                """
+                                sh "git add terraform.tfvars"
+                            }
+                        }
+                        echo "▶ Prod 배포 이미지: ${env.SERVICE_NAME}:${env.IMAGE_TAG}"
+
+                        withCredentials([
+                                usernamePassword(credentialsId: "${env.GIT_CREDENTIAL_ID}", passwordVariable: 'git_password', usernameVariable: 'git_username'),
+                                string(credentialsId: 'GITHUB_EMAIL', variable: 'git_email')
+                        ]) {
+                            sh '''
+                                git config user.email "$git_email"
+                                git config user.name "$git_username"
+                                git commit -m "🚀[CI▸CD] update prod tfvars for <$TARGET_REGIONS>" || echo "No Changes"
+                                git push https://$git_username:$git_password@github.com/KJH0476/cicd-with-iac.git main
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+    }
+    post {
+        success {
+            slackSend (
+                    channel: "${env.SLACK_CHANNEL}",
+                    color: '#00b050',
+                    message: """
+                        ✅ *CI 성공*  
+                        - Build Id: `${env.BUILD_ID}`
+                        - Job: `${env.JOB_NAME}`  
+                        - Branch: `${env.BRANCH_NAME}`  
+                        - Region: `${env.TARGET_REGIONS}`
+                        - Changed Service: `${env.SERVICE_NAME}`  
+                        - Image Tag: `${env.IMAGE_TAG}`  
+                    """.stripIndent()
+            )
+        }
+        failure {
+            slackSend (
+                    channel: "${SLACK_CHANNEL}",
+                    color: '#ff0000',
+                    message: """
+                        ❌ *CI 실패*  
+                        - Build Id: `${env.BUILD_ID}`
+                        - Job: `${env.JOB_NAME}`
+                        - Branch: `${env.BRANCH_NAME}`  
+                        - Region: `${env.TARGET_REGIONS}`
+                        - Changed Service: `${env.SERVICE_NAME}`  
+                        - Image Tag: `${env.IMAGE_TAG}`  
+                    """.stripIndent()
+            )
+        }
+    }
+}
