@@ -11,6 +11,7 @@ pipeline {
         GIT_CREDENTIAL_ID = '0362778c-564c-43d8-9c25-c32d4deeffb2'
         AWS_CREDENTIALS_ID = 'AWS_CREDENTIALS'
         SLACK_CHANNEL = '#jenkins-알림'
+        REGION_PREFIX = ['ap-northeast-2': 'apn2', 'us-east-1': 'use1']
     }
 
     stages {
@@ -22,7 +23,6 @@ pipeline {
                     def ts = new Date().format('yyyyMMdd-HHmmss')
                     env.SERVICE_NAME = "${env.JOB_NAME.split('/')[0]}"
                     env.IMAGE_TAG = "${env.SERVICE_NAME}-${ts}"
-                    env.TARGET_REGIONS = (params.REGION == 'all') ? 'ap-northeast-2,us-east-1' : params.REGION
                     env.DOCKERFILE_PATH = "services/${env.SERVICE_NAME}"
                 }
                 echo "이미지 태그: ${env.IMAGE_TAG}"
@@ -45,9 +45,6 @@ pipeline {
                 ]) {
                     script {
                         env.AWS_ACCOUNT_ID = "${aws_account_id}"
-                        def regions = (params.REGION == 'all') ? ['ap-northeast-2', 'us-east-1'] : [params.REGION]
-                        def regionMap = ['ap-northeast-2': 'apn2', 'us-east-1': 'use1']
-
                         def parts = env.SERVICE_NAME.split('_')
                         def dockerfilePath = []
                         for(p in parts) {
@@ -56,16 +53,14 @@ pipeline {
                             dockerfilePath.add(path)
                         }
                         def folderName = dockerfilePath.join('')
-                        regions.each{ region ->
-                            def regionPrefix = regionMap[region]
-                            def devRepo = "dev-${regionPrefix}-ecr-repo"
-                            sh """
-                               aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${region}.amazonaws.com
-                            """
+                        def devRepo = "dev-${env.REGION_PREFIX[params.REGION]}-ecr-repo"
+                        def devImgName = "${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
 
-                            sh "docker build --platform linux/amd64 -t ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:${env.IMAGE_TAG} ./services/${folderName}"
-                            sh "docker push ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:${env.IMAGE_TAG}"
-                        }
+                        sh """
+                           aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com
+                           docker build --platform linux/amd64 -t ${devImgName} ./services/${folderName}
+                           docker push ${devImgName}:${env.IMAGE_TAG}
+                        """
                     }
                 }
             }
@@ -76,21 +71,16 @@ pipeline {
             }
             steps {
                 script {
-                    def regions = (params.REGION == 'all') ? ['ap-northeast-2', 'us-east-1'] : [params.REGION]
-                    def regionMap = ['ap-northeast-2': 'apn2', 'us-east-1': 'use1']
-                    regions.each { region ->
-                        def regionPrefix = regionMap[region]
-                        def devRepo = "dev-${regionPrefix}-ecr-repo"
-                        def shortRegion = region.replaceAll('-', '')
-                        dir("IaC/${shortRegion}/env/dev") {
-                            // terraform.tfvars 바로 수정
-                            sh """
-                                sed -E -i '/^${env.SERVICE_NAME}[A-Za-z0-9_]*\\s*=\\s*{/,/}/ \
-                                  s#^\\s*image_uri\\s*=.*#image_uri = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${region}.amazonaws.com/${devRepo}:${env.IMAGE_TAG}"#' \
-                                  terraform.tfvars
-                            """
-                            sh "git add terraform.tfvars"
-                        }
+                    def shortRegion = params.REGION.replaceAll('-', '')
+                    def devRepo = "dev-${env.REGION_PREFIX[params.REGION]}-ecr-repo"
+                    def devImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
+
+                    dir("IaC/${shortRegion}/env/dev") {
+                        // terraform.tfvars 의 서비스별 image_uri 수정
+                        sh """
+                            sed -E -i'' -e "/^[ \\t]*${env.SERVICE_NAME}.*[ \\t]*=/,/^[ \\t]*}/ { s#^([ \\t]*)image_uri[ \\t]*=.*#\\1image_uri = \\"${devImgName}:${env.IMAGE_TAG}\\"# }" terraform.tfvars
+                        """
+                        sh "git add terraform.tfvars"
                     }
                     echo "▶ Dev 배포 태그: ${env.IMAGE_TAG}"
 
@@ -101,7 +91,7 @@ pipeline {
                         sh '''
                             git config user.email "$git_email"
                             git config user.name "$git_username"
-                            git commit -m "🚀[CI▸CD] update dev tfvars for <$TARGET_REGIONS>" || echo "No Changes"
+                            git commit -m "🚀[CI▸CD] update dev tfvars for <$params.REGION>" || echo "No Changes"
                             git push https://$git_username:$git_password@github.com/KJH0476/cicd-with-iac.git develop
                         '''
                     }
@@ -126,18 +116,14 @@ pipeline {
                     string(credentialsId: 'AWS_ID', variable: 'aws_account_id')
                 ]) {
                     script {
-                        def regions = (params.REGION == 'all') ? ['ap-northeast-2', 'us-east-1'] : [params.REGION]
-                        def regionMap = ['ap-northeast-2': 'apn2', 'us-east-1': 'use1']
-                        regions.each{ region ->
-                            def regionPrefix = regionMap[region]
-                            def devRepo = "dev-${regionPrefix}-ecr-repo"
-                            sh """
-                               aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${region}.amazonaws.com
-                            """
+                        def devRepo = "dev-${env.REGION_PREFIX[params.REGION]}-ecr-repo"
+                        def devImgName = "${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
 
-                            sh "docker tag ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:${env.IMAGE_TAG} ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:candidate"
-                            sh "docker push ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:candidate"
-                        }
+                        sh """
+                           aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com
+                           docker tag ${devImgName}:${env.IMAGE_TAG} ${devImgName}:candidate
+                           docker push ${devImgName}:candidate
+                        """
                     }
                 }
             }
@@ -156,31 +142,26 @@ pipeline {
                     string(credentialsId: 'AWS_ID', variable: 'aws_account_id')
                 ]) {
                     script {
-                        def regions = (params.REGION == 'all') ? ['ap-northeast-2', 'us-east-1'] : [params.REGION]
-                        def regionMap = ['ap-northeast-2': 'apn2', 'us-east-1': 'use1']
-                        regions.each { region ->
-                            def regionPrefix = regionMap[region]
-                            def devRepo  = "dev-${regionPrefix}-ecr-repo"
-                            def prodRepo = "prod-${regionPrefix}-ecr-repo"
-                            def shortRegion = region.replaceAll('-', '')
+                        def shortRegion = region.replaceAll('-', '')
+                        def devRepo  = "dev-${env.REGION_PREFIX[params.REGION]}-ecr-repo"
+                        def prodRepo = "prod-${env.REGION_PREFIX[params.REGION]}-ecr-repo"
+                        def devImgName = "${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
+                        def prodImgName = "${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com/${prodRepo}"
 
+                        sh """
+                            aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com
+                            docker tag ${devImgName}:candidate ${prodImgName}:${env.IMAGE_TAG}
+                            docker push ${prodImgName}:${env.IMAGE_TAG}
+                        """
+
+                        dir("IaC/${shortRegion}/env/prod") {
+                            // terraform.tfvars 의 서비스별 image_uri 수정
                             sh """
-                                aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${region}.amazonaws.com
-                                docker tag ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${devRepo}:candidate ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${prodRepo}:${env.IMAGE_TAG}
-                                docker push ${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${prodRepo}:${env.IMAGE_TAG}
+                                sed -E -i'' -e "/^[ \\t]*${env.SERVICE_NAME}.*[ \\t]*=/,/^[ \\t]*}/ { s#^([ \\t]*)image_uri[ \\t]*=.*#\\1image_uri = \\"${fullImageName}\\"# }" terraform.tfvars
                             """
-
-                            dir("IaC/${shortRegion}/env/prod") {
-                                // terraform.tfvars 바로 수정
-                                sh """
-                                    sed -E -i '/^${env.SERVICE_NAME}[A-Za-z0-9_]*\\s*=\\s*{/,/}/ \
-                                      s#^\\s*image_uri\\s*=.*#image_uri = "${aws_account_id}.dkr.ecr.${region}.amazonaws.com/${prodRepo}:${env.IMAGE_TAG}"#' \
-                                      terraform.tfvars
-                                """
-                                sh "git add terraform.tfvars"
-                            }
+                            sh "git add terraform.tfvars"
                         }
-                        echo "▶ Prod 배포 이미지: ${env.SERVICE_NAME}:${env.IMAGE_TAG}"
+                        echo "▶ Prod 배포 태그: ${env.IMAGE_TAG}"
 
                         withCredentials([
                                 usernamePassword(credentialsId: "${env.GIT_CREDENTIAL_ID}", passwordVariable: 'git_password', usernameVariable: 'git_username'),
@@ -189,7 +170,7 @@ pipeline {
                             sh '''
                                 git config user.email "$git_email"
                                 git config user.name "$git_username"
-                                git commit -m "🚀[CI▸CD] update prod tfvars for <$TARGET_REGIONS>" || echo "No Changes"
+                                git commit -m "🚀[CI▸CD] update prod tfvars for <$params.REGION>" || echo "No Changes"
                                 git push https://$git_username:$git_password@github.com/KJH0476/cicd-with-iac.git main
                             '''
                         }
@@ -208,7 +189,7 @@ pipeline {
                         - Build Id: `${env.BUILD_ID}`
                         - Job: `${env.JOB_NAME}`  
                         - Branch: `${env.BRANCH_NAME}`  
-                        - Region: `${env.TARGET_REGIONS}`
+                        - Region: `${params.REGION}`
                         - Changed Service: `${env.SERVICE_NAME}`  
                         - Image Tag: `${env.IMAGE_TAG}`  
                     """.stripIndent()
@@ -223,7 +204,7 @@ pipeline {
                         - Build Id: `${env.BUILD_ID}`
                         - Job: `${env.JOB_NAME}`
                         - Branch: `${env.BRANCH_NAME}`  
-                        - Region: `${env.TARGET_REGIONS}`
+                        - Region: `${params.REGION}`
                         - Changed Service: `${env.SERVICE_NAME}`  
                         - Image Tag: `${env.IMAGE_TAG}`  
                     """.stripIndent()
