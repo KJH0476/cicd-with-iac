@@ -10,6 +10,7 @@ pipeline {
     environment {
         GIT_CREDENTIAL_ID = '0362778c-564c-43d8-9c25-c32d4deeffb2'
         AWS_CREDENTIALS_ID = 'AWS_CREDENTIALS'
+        AWS_ACCOUNT_ID = credentials('AWS_ID')
         SLACK_CHANNEL = '#jenkins-알림'
         REGION_PREFIX = ['ap-northeast-2': 'apn2', 'us-east-1': 'use1']
     }
@@ -26,7 +27,7 @@ pipeline {
                     env.DOCKERFILE_PATH = "services/${env.SERVICE_NAME}"
                 }
                 echo "이미지 태그: ${env.IMAGE_TAG}"
-                echo "대상 리전: ${env.TARGET_REGIONS}"
+                echo "대상 리전: ${params.REGION}"
             }
         }
         stage('이미지 빌드 및 ECR 푸시') {
@@ -40,11 +41,9 @@ pipeline {
                         credentialsId: "${env.AWS_CREDENTIALS_ID}",
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ],
-                    string(credentialsId: 'AWS_ID', variable: 'aws_account_id')
+                    ]
                 ]) {
                     script {
-                        env.AWS_ACCOUNT_ID = "${aws_account_id}"
                         def parts = env.SERVICE_NAME.split('_')
                         def dockerfilePath = []
                         for(p in parts) {
@@ -54,10 +53,10 @@ pipeline {
                         }
                         def folderName = dockerfilePath.join('')
                         def devRepo = "dev-${env.REGION_PREFIX[params.REGION]}-ecr-repo"
-                        def devImgName = "${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
+                        def devImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
 
                         sh """
-                           aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com
+                           aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com
                            docker build --platform linux/amd64 -t ${devImgName} ./services/${folderName}
                            docker push ${devImgName}:${env.IMAGE_TAG}
                         """
@@ -88,12 +87,12 @@ pipeline {
                             usernamePassword(credentialsId: "${env.GIT_CREDENTIAL_ID}", passwordVariable: 'git_password', usernameVariable: 'git_username'),
                             string(credentialsId: 'GITHUB_EMAIL', variable: 'git_email')
                     ]) {
-                        sh '''
-                            git config user.email "$git_email"
-                            git config user.name "$git_username"
-                            git commit -m "🚀[CI▸CD] update dev tfvars for <$params.REGION>" || echo "No Changes"
-                            git push https://$git_username:$git_password@github.com/KJH0476/cicd-with-iac.git develop
-                        '''
+                        sh """
+                            git config user.email '${git_email}'
+                            git config user.name '${git_username}'
+                            git commit -m '🚀[CI▸CD] update dev tfvars for <${params.REGION}>' || echo 'No Changes'
+                            git push https://${git_username}:${git_password}@github.com/KJH0476/cicd-with-iac.git develop
+                        """
                     }
                 }
             }
@@ -112,15 +111,14 @@ pipeline {
                         credentialsId: "${env.AWS_CREDENTIALS_ID}",
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ],
-                    string(credentialsId: 'AWS_ID', variable: 'aws_account_id')
+                    ]
                 ]) {
                     script {
                         def devRepo = "dev-${env.REGION_PREFIX[params.REGION]}-ecr-repo"
-                        def devImgName = "${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
+                        def devImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
 
                         sh """
-                           aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com
+                           aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com
                            docker tag ${devImgName}:${env.IMAGE_TAG} ${devImgName}:candidate
                            docker push ${devImgName}:candidate
                         """
@@ -138,18 +136,17 @@ pipeline {
                         credentialsId: "${env.AWS_CREDENTIALS_ID}",
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ],
-                    string(credentialsId: 'AWS_ID', variable: 'aws_account_id')
+                    ]
                 ]) {
                     script {
                         def shortRegion = region.replaceAll('-', '')
                         def devRepo  = "dev-${env.REGION_PREFIX[params.REGION]}-ecr-repo"
                         def prodRepo = "prod-${env.REGION_PREFIX[params.REGION]}-ecr-repo"
-                        def devImgName = "${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
-                        def prodImgName = "${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com/${prodRepo}"
+                        def devImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
+                        def prodImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${prodRepo}"
 
                         sh """
-                            aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${aws_account_id}.dkr.ecr.${params.REGION}.amazonaws.com
+                            aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com
                             docker tag ${devImgName}:candidate ${prodImgName}:${env.IMAGE_TAG}
                             docker push ${prodImgName}:${env.IMAGE_TAG}
                         """
@@ -167,12 +164,12 @@ pipeline {
                                 usernamePassword(credentialsId: "${env.GIT_CREDENTIAL_ID}", passwordVariable: 'git_password', usernameVariable: 'git_username'),
                                 string(credentialsId: 'GITHUB_EMAIL', variable: 'git_email')
                         ]) {
-                            sh '''
-                                git config user.email "$git_email"
-                                git config user.name "$git_username"
-                                git commit -m "🚀[CI▸CD] update prod tfvars for <$params.REGION>" || echo "No Changes"
-                                git push https://$git_username:$git_password@github.com/KJH0476/cicd-with-iac.git main
-                            '''
+                            sh """
+                                git config user.email '${git_email}'
+                                git config user.name '${git_username}'
+                                git commit -m '🚀[CI▸CD] update prod tfvars for <${params.REGION}>' || echo 'No Changes'
+                                git push https://${git_username}:${git_password}@github.com/KJH0476/cicd-with-iac.git develop
+                            """
                         }
                     }
                 }
