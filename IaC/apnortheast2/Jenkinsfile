@@ -28,7 +28,6 @@ pipeline {
                         def shortRegion = env.REGION.replaceAll('-', '')
                         def path = "IaC/${shortRegion}/env/${env.ENV_NAME}"
                         dir(path) {
-                            sh 'terraform fmt -recursive'
                             sh 'terraform init -input=false'
                             sh 'terraform validate'
                             sh 'terraform plan'
