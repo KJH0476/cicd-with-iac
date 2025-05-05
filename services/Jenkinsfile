@@ -83,16 +83,15 @@ pipeline {
                     }
                     echo "▶ Dev 배포 태그: ${env.IMAGE_TAG}"
 
-                    withCredentials([
-                            usernamePassword(credentialsId: "${env.GIT_CREDENTIAL_ID}", passwordVariable: 'git_password', usernameVariable: 'git_username'),
-                            string(credentialsId: 'GITHUB_EMAIL', variable: 'git_email')
-                    ]) {
-                        sh """
-                            git config user.email '${git_email}'
-                            git config user.name '${git_username}'
-                            git commit -m '🚀[CI▸CD] update dev tfvars for <${params.REGION}>' || echo 'No Changes'
-                            git push https://${git_username}:${git_password}@github.com/KJH0476/cicd-with-iac.git develop
-                        """
+                    withCredentials([string(credentialsId: 'GITHUB_EMAIL', variable: 'git_email')]) {
+                        sshagent(credentials: ["${env.GIT_CREDENTIAL_ID}"]) {
+                            sh """
+                                git config user.email '${git_email}'
+                                git config user.name 'Jenkins-CI'
+                                git commit -m '🚀[CI▸CD] update dev tfvars for <${params.REGION}>' || echo 'No Changes'
+                                git push git@github.com:KJH0476/cicd-with-iac.git develop
+                            """
+                        }
                     }
                 }
             }
@@ -160,16 +159,15 @@ pipeline {
                         }
                         echo "▶ Prod 배포 태그: ${env.IMAGE_TAG}"
 
-                        withCredentials([
-                                usernamePassword(credentialsId: "${env.GIT_CREDENTIAL_ID}", passwordVariable: 'git_password', usernameVariable: 'git_username'),
-                                string(credentialsId: 'GITHUB_EMAIL', variable: 'git_email')
-                        ]) {
-                            sh """
-                                git config user.email '${git_email}'
-                                git config user.name '${git_username}'
-                                git commit -m '🚀[CI▸CD] update prod tfvars for <${params.REGION}>' || echo 'No Changes'
-                                git push https://${git_username}:${git_password}@github.com/KJH0476/cicd-with-iac.git main
-                            """
+                        withCredentials([string(credentialsId: 'GITHUB_EMAIL', variable: 'git_email')]) {
+                            sshagent(credentials: ["${env.GIT_CREDENTIAL_ID}"]) {
+                                sh """
+                                    git config user.email '${git_email}'
+                                    git config user.name 'Jenkins-CI'
+                                    git commit -m '🚀[CI▸CD] update prod tfvars for <${params.REGION}>' || echo 'No Changes'
+                                    git push git@github.com:KJH0476/cicd-with-iac.git main
+                                """
+                            }
                         }
                     }
                 }
