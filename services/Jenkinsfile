@@ -89,7 +89,7 @@ pipeline {
                                 git config user.email '${git_email}'
                                 git config user.name 'Jenkins-CI'
                                 git commit -m '🚀[CI▸CD] update dev tfvars for <${params.REGION}>' || echo 'No Changes'
-                                git push git@github.com:KJH0476/cicd-with-iac.git develop
+                                git push git@github.com:KJH0476/cicd-with-iac.git HEAD:develop
                             """
                         }
                     }
@@ -165,7 +165,7 @@ pipeline {
                                     git config user.email '${git_email}'
                                     git config user.name 'Jenkins-CI'
                                     git commit -m '🚀[CI▸CD] update prod tfvars for <${params.REGION}>' || echo 'No Changes'
-                                    git push git@github.com:KJH0476/cicd-with-iac.git main
+                                    git push git@github.com:KJH0476/cicd-with-iac.git HEAD:main
                                 """
                             }
                         }
