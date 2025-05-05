@@ -57,7 +57,7 @@ pipeline {
 
                         sh """
                            aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com
-                           docker build --platform linux/amd64 -t ${devImgName} ./services/${folderName}
+                           docker build --platform linux/amd64 -t ${devImgName}:${env.IMAGE_TAG} ./services/${folderName}
                            docker push ${devImgName}:${env.IMAGE_TAG}
                         """
                     }
