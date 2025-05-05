@@ -167,8 +167,6 @@ public class AuthorizationFilter extends AbstractGatewayFilterFactory<Authorizat
                 log.error("error : {}", e.getMessage());
                 return unauthorizedResponse(exchange, "invalid token");
             }
-
-            //return chain.filter(exchange);
         });
     }
 
