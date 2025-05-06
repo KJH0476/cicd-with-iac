@@ -78,10 +78,4 @@ public class NotificationController {
         log.error("이메일 전송 실패, SES 오류 발생 {}", e.getMessage());
         return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
     }
-
-    @PostMapping("/notification/test")
-    public ResponseEntity<String> confirmReservation() {
-        log.info("Notification service test");
-        return new ResponseEntity<>("Notification service test", HttpStatus.OK);
-    }
 }
