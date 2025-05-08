@@ -167,8 +167,6 @@ public class AuthorizationFilter extends AbstractGatewayFilterFactory<Authorizat
                 log.error("error : {}", e.getMessage());
                 return unauthorizedResponse(exchange, "invalid token");
             }
-
-            //return chain.filter(exchange);
         });
     }
 
@@ -187,7 +185,7 @@ public class AuthorizationFilter extends AbstractGatewayFilterFactory<Authorizat
         return sendResponse(exchange, HttpStatus.FORBIDDEN, message);
     }
 
-    // 성공 응답 처리
+    // 응답 처리
     private Mono<Void> sendResponse(ServerWebExchange exchange, HttpStatus status, String message, String accessToken) {
         exchange.getResponse().setStatusCode(status);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);

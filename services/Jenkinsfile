@@ -1,0 +1,209 @@
+pipeline {
+    agent any
+    parameters {
+        choice(
+                name: 'REGION',
+                choices: ['ap-northeast-2', 'us-east-1'],
+                description: 'AWS 리전을 선택하세요.'
+        )
+    }
+    environment {
+        GIT_CREDENTIAL_ID = '0362778c-564c-43d8-9c25-c32d4deeffb2'
+        AWS_CREDENTIALS_ID = 'AWS_CREDENTIALS'
+        AWS_ACCOUNT_ID = credentials('AWS_ID')
+        SLACK_CHANNEL = '#jenkins-알림'
+    }
+
+    stages {
+        stage('준비') {
+            steps {
+                checkout scm
+                echo "▶ BRANCH=${env.BRANCH_NAME}, REGION=${params.REGION}, JOB_NAME=${env.JOB_NAME}"
+                script {
+                    def ts = new Date().format('yyyyMMdd-HHmmss')
+                    def regionPrefix = ['ap-northeast-2':'apn2','us-east-1':'use1']
+                    env.SERVICE_NAME = "${env.JOB_NAME.split('/')[0]}"
+                    env.IMAGE_TAG = "${env.SERVICE_NAME}-${ts}"
+                    env.REGION_PREFIX = regionPrefix[params.REGION]
+                }
+                echo "이미지 태그: ${env.IMAGE_TAG}"
+                echo "대상 리전: ${params.REGION}"
+            }
+        }
+        stage('이미지 빌드 및 ECR 푸시') {
+            when {
+                expression { env.BRANCH_NAME == 'develop' }
+            }
+            steps {
+                // ECR 로그인
+                withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: "${env.AWS_CREDENTIALS_ID}",
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]
+                ]) {
+                    script {
+                        def parts = env.SERVICE_NAME.split('_')
+                        def dockerfilePath = []
+                        for(p in parts) {
+                            def lower = p.toLowerCase()
+                            def path = lower[0].toUpperCase()+lower.substring(1)
+                            dockerfilePath.add(path)
+                        }
+                        def folderName = dockerfilePath.join('')
+                        def devRepo = "dev-${env.REGION_PREFIX}-ecr-repo"
+                        def devImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
+
+                        sh """
+                           aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com
+                           docker build --platform linux/amd64 -t ${devImgName}:${env.IMAGE_TAG} ./services/${folderName}
+                           docker push ${devImgName}:${env.IMAGE_TAG}
+                        """
+                    }
+                }
+            }
+        }
+        stage('dev tfvars 업데이트 및 develop 브랜치에 커밋') {
+            when {
+                expression { env.BRANCH_NAME == 'develop' }
+            }
+            steps {
+                script {
+                    def shortRegion = params.REGION.replaceAll('-', '')
+                    def devRepo = "dev-${env.REGION_PREFIX}-ecr-repo"
+                    def devImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
+
+                    dir("IaC/${shortRegion}/env/dev") {
+                        // terraform.tfvars 의 서비스별 image_uri 수정
+                        sh """
+                            sed -E -i'' -e "/^[ \\t]*${env.SERVICE_NAME}.*[ \\t]*=/,/^[ \\t]*}/ { s#^([ \\t]*)image_uri[ \\t]*=.*#\\1image_uri = \\"${devImgName}:${env.IMAGE_TAG}\\"# }" terraform.tfvars
+                        """
+                        sh "git add terraform.tfvars"
+                    }
+                    echo "▶ Dev 배포 태그: ${env.IMAGE_TAG}"
+
+                    withCredentials([string(credentialsId: 'GITHUB_EMAIL', variable: 'git_email')]) {
+                        sshagent(credentials: ["${env.GIT_CREDENTIAL_ID}"]) {
+                            sh """
+                                git config user.email '${git_email}'
+                                git config user.name 'Jenkins-CI'
+                                git commit -m '🚀[CI▸CD] ${env.SERVICE_NAME}@${env.IMAGE_TAG} → dev tfvars (${params.REGION}), build#${env.BUILD_ID}' || echo 'No Changes'
+                                git push git@github.com:KJH0476/cicd-with-iac.git HEAD:develop
+                            """
+                        }
+                    }
+                }
+            }
+        }
+        stage('dev 이미지 테스트 완료 및 승인') {
+            when {
+                expression { env.BRANCH_NAME == 'develop' }
+            }
+            steps {
+                input message: """
+                - 테스트할 이미지 태그 : ${env.IMAGE_TAG}
+                테스트 완료 시 candidate 태그로 푸시됩니다.
+                """
+                withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: "${env.AWS_CREDENTIALS_ID}",
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]
+                ]) {
+                    script {
+                        def devRepo = "dev-${env.REGION_PREFIX}-ecr-repo"
+                        def devImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
+
+                        sh """
+                           aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com
+                           docker tag ${devImgName}:${env.IMAGE_TAG} ${devImgName}:candidate
+                           docker push ${devImgName}:candidate
+                        """
+                    }
+                }
+            }
+        }
+        stage('prod tfvars 업데이트 및 main 브랜치에 커밋') {
+            when {
+                expression { env.BRANCH_NAME == 'main' }
+            }
+            steps {
+                withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: "${env.AWS_CREDENTIALS_ID}",
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]
+                ]) {
+                    script {
+                        def shortRegion = params.REGION.replaceAll('-', '')
+                        def devRepo  = "dev-${env.REGION_PREFIX}-ecr-repo"
+                        def prodRepo = "prod-${env.REGION_PREFIX}-ecr-repo"
+                        def devImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
+                        def prodImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${prodRepo}"
+
+                        sh """
+                            aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com
+                            docker tag ${devImgName}:candidate ${prodImgName}:${env.IMAGE_TAG}
+                            docker push ${prodImgName}:${env.IMAGE_TAG}
+                        """
+
+                        dir("IaC/${shortRegion}/env/prod") {
+                            // terraform.tfvars 의 서비스별 image_uri 수정
+                            sh """
+                                sed -E -i'' -e "/^[ \\t]*${env.SERVICE_NAME}.*[ \\t]*=/,/^[ \\t]*}/ { s#^([ \\t]*)image_uri[ \\t]*=.*#\\1image_uri = \\"${prodImgName}:${env.IMAGE_TAG}\\"# }" terraform.tfvars
+                            """
+                            sh "git add terraform.tfvars"
+                        }
+                        echo "▶ Prod 배포 태그: ${env.IMAGE_TAG}"
+
+                        withCredentials([string(credentialsId: 'GITHUB_EMAIL', variable: 'git_email')]) {
+                            sshagent(credentials: ["${env.GIT_CREDENTIAL_ID}"]) {
+                                sh """
+                                    git config user.email '${git_email}'
+                                    git config user.name 'Jenkins-CI'
+                                    git commit -m '🚀[CI▸CD] ${env.SERVICE_NAME}@${env.IMAGE_TAG} → prod tfvars (${params.REGION}), build#${env.BUILD_ID}' || echo 'No Changes'
+                                    git push git@github.com:KJH0476/cicd-with-iac.git HEAD:main
+                                """
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    post {
+        success {
+            slackSend (
+                    channel: "${env.SLACK_CHANNEL}",
+                    color: '#00b050',
+                    message: """
+                        ✅ *CI 성공*  
+                        - Build Id: `${env.BUILD_ID}`
+                        - Job: `${env.JOB_NAME}`  
+                        - Branch: `${env.BRANCH_NAME}`  
+                        - Region: `${params.REGION}`
+                        - Changed Service: `${env.SERVICE_NAME}`  
+                        - Image Tag: `${env.IMAGE_TAG}`  
+                    """.stripIndent()
+            )
+        }
+        failure {
+            slackSend (
+                    channel: "${env.SLACK_CHANNEL}",
+                    color: '#ff0000',
+                    message: """
+                        ❌ *CI 실패*  
+                        - Build Id: `${env.BUILD_ID}`
+                        - Job: `${env.JOB_NAME}`
+                        - Branch: `${env.BRANCH_NAME}`  
+                        - Region: `${params.REGION}`
+                        - Changed Service: `${env.SERVICE_NAME}`  
+                        - Image Tag: `${env.IMAGE_TAG}`  
+                    """.stripIndent()
+            )
+        }
+    }
+}

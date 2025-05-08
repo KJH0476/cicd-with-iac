@@ -1,0 +1,71 @@
+pipeline {
+    agent any
+    environment {
+        REGION = 'ap-northeast-2'
+        AWS_CREDENTIALS_ID = 'AWS_CREDENTIALS'
+        SLACK_CHANNEL = '#jenkins-알림'
+    }
+
+    stages {
+        stage('준비') {
+            steps {
+                checkout scm
+                script {
+                    env.ENV_NAME = (env.BRANCH_NAME == 'main') ? 'prod' : 'dev'
+                }
+                echo "▶ BRANCH=${env.BRANCH_NAME}, REGION=${env.REGION}, JOB_NAME=${env.JOB_NAME}"
+            }
+        }
+        stage('Terraform 사용한 배포') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: "${env.AWS_CREDENTIALS_ID}",
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    script {
+                        def shortRegion = env.REGION.replaceAll('-', '')
+                        def path = "IaC/${shortRegion}/env/${env.ENV_NAME}"
+                        dir(path) {
+                            sh 'terraform init -input=false'
+                            sh 'terraform validate'
+                            sh 'terraform plan'
+                            sh 'terraform apply -auto-approve'
+                        }
+                    }
+                }
+            }
+        }
+    }
+    post {
+        success {
+            slackSend (
+                    channel: "${SLACK_CHANNEL}",
+                    color: '#00b050',
+                    message: """
+                        ✅ *CD 성공*  
+                        - Build_Id: `${env.BUILD_ID}`
+                        - Job: `${env.JOB_NAME}`
+                        - Branch: `${env.BRANCH_NAME}`  
+                        - Region: `${env.REGION}`
+                        - Enviroment: `${env.ENV_NAME}`
+                    """.stripIndent()
+            )
+        }
+        failure {
+            slackSend (
+                    channel: "${SLACK_CHANNEL}",
+                    color: '#ff0000',
+                    message: """
+                        ❌ *CD 실패*  
+                        - Build_Id: `${env.BUILD_ID}`
+                        - Job: `${env.JOB_NAME}`
+                        - Branch: `${env.BRANCH_NAME}`  
+                        - Region: `${env.REGION}`
+                        - Enviroment: `${env.ENV_NAME}`   
+                    """.stripIndent()
+            )
+        }
+    }
+}
