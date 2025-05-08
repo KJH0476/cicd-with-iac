@@ -37,7 +37,7 @@ module "common" {
 
   region_prefix         = var.region_prefix
   environment           = var.environment
-  root_domain_name      = var.root_domain_name
+  root_domain_name      = var.alb_record_name
   route53_zone_id        = module.route53.route53_hosted_zone_id
   ses_emails    = var.ses_emails
 
