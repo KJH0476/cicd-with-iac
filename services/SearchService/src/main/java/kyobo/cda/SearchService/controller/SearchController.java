@@ -63,4 +63,9 @@ public class SearchController {
                     .build(), HttpStatus.BAD_REQUEST);
         }
     }
+
+    @GetMapping("/restaurants/cicd")
+    public ResponseEntity<String> cicd() {
+        return new ResponseEntity<>("CICD TEST", HttpStatus.OK);
+    }
 }
