@@ -186,6 +186,7 @@ public class AuthorizationFilter extends AbstractGatewayFilterFactory<Authorizat
     }
 
     // 응답 처리
+    // 각 상태 코드에 맞는 응답을 작성하는 메서드
     private Mono<Void> sendResponse(ServerWebExchange exchange, HttpStatus status, String message, String accessToken) {
         exchange.getResponse().setStatusCode(status);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
