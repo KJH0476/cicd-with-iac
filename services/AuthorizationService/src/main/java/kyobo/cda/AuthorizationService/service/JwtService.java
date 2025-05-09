@@ -107,4 +107,8 @@ public class JwtService {
         //SecretKeySpec : Jwt를 서명하거나 서명을 검증하는 데 사용
         signature = new SecretKeySpec(keyByte, SignatureAlgorithm.HS256.getJcaName());
     }
+
+    public String test() {
+        return "CICD TEST!!!";
+    }
 }
