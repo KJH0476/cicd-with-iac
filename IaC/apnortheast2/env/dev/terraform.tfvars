@@ -16,7 +16,7 @@ service_port = 8000
 # common 주입 변수
 root_domain_name = "til-challenge.com"
 
-alb_record_name = "kr.til-challenge.com"
+alb_record_name = "dev-kr.til-challenge.com"
 
 # iam 주입 변수
 ssm_prefix = "team9900"
@@ -110,7 +110,7 @@ services = {
     enable_alb            = false
     family                = "dev-apn2-search-service-task"
     host_port             = 8083
-    image_uri = "471112983866.dkr.ecr.ap-northeast-2.amazonaws.com/dev-apn2-ecr-repo:search_service-20250508-113852"
+    image_uri             = "hyeok1234565/search-service:iac"
     log_index             = "ecs_logs_search_svc"
     log_port              = 443
     port_name             = "search-port"

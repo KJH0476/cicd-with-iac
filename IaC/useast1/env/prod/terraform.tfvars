@@ -16,7 +16,7 @@ service_port = 8000
 # common 주입 변수
 root_domain_name = "til-challenge.com"
 
-alb_record_name = "kr.til-challenge.com"
+alb_record_name = "us.til-challenge.com"
 
 # iam 주입 변수
 ssm_prefix = "team9900"
