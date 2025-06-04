@@ -53,17 +53,16 @@
 ## 파일 구조
 ```shell
 .
-├── README.md
 ├── _module
-│   ├── bastion
-│   │   ├── main.tf
-│   │   ├── outputs.tf
-│   │   └── variables.tf
 │   ├── common
 │   │   ├── main.tf
 │   │   ├── outputs.tf
 │   │   └── variables.tf
 │   ├── database
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   ├── ec2
 │   │   ├── main.tf
 │   │   ├── outputs.tf
 │   │   └── variables.tf
@@ -105,64 +104,66 @@
 │       ├── outputs.tf
 │       └── variables.tf
 ├── apnortheast2
-│   └── env
-│       ├── dev
-│       │   ├── backend.tf
-│       │   ├── bastion_ssh_key
-│       │   │   ├── dev-apn2-bastion-key
-│       │   │   └── dev-apn2-bastion-key.pub
-│       │   ├── lambda_functions
-│       │   │   ├── lambda_fucntion.py
-│       │   │   └── lambda_function.zip
-│       │   ├── main.tf
-│       │   ├── outputs.tf
-│       │   ├── provider.tf
-│       │   ├── terraform.tfvars
-│       │   └── variables.tf
-│       └── prod
-│           ├── backend.tf
-│           ├── bastion_ssh_key
-│           │   ├── prod-apn2-bastion-key
-│           │   └── prod-apn2-bastion-key.pub
-│           ├── lambda_functions
-│           │   ├── lambda_fucntion.py
-│           │   └── lambda_function.zip
-│           ├── main.tf
-│           ├── outputs.tf
-│           ├── provider.tf
-│           ├── terraform.tfvars
-│           └── variables.tf
+│   ├── env
+│   │   ├── dev
+│   │   │   ├── backend.tf
+│   │   │   ├── bastion_ssh_key
+│   │   │   │   ├── dev-apn2-bastion-key
+│   │   │   │   └── dev-apn2-bastion-key.pub
+│   │   │   ├── lambda_functions
+│   │   │   │   ├── lambda_fucntion.py
+│   │   │   │   └── lambda_function.zip
+│   │   │   ├── main.tf
+│   │   │   ├── outputs.tf
+│   │   │   ├── provider.tf
+│   │   │   ├── terraform.tfvars
+│   │   │   └── variables.tf
+│   │   └── prod
+│   │       ├── backend.tf
+│   │       ├── bastion_ssh_key
+│   │       │   ├── prod-apn2-bastion-key
+│   │       │   └── prod-apn2-bastion-key.pub
+│   │       ├── lambda_functions
+│   │       │   ├── lambda_fucntion.py
+│   │       │   └── lambda_function.zip
+│   │       ├── main.tf
+│   │       ├── outputs.tf
+│   │       ├── provider.tf
+│   │       ├── terraform.tfvars
+│   │       └── variables.tf
+│   └── Jenkinsfile
 ├── init
-│   ├── init.tf
-│   └── terraform.tfstate
+│   └── init.tf
+├── README.md
 └── useast1
-    └── env
-        ├── dev
-        │   ├── backend.tf
-        │   ├── bastion_ssh_key
-        │   │   ├── dev-use1-bastion-key
-        │   │   └── dev-use1-bastion-key.pub
-        │   ├── lambda_functions
-        │   │   ├── lambda_fucntion.py
-        │   │   └── lambda_function.zip
-        │   ├── main.tf
-        │   ├── outputs.tf
-        │   ├── provider.tf
-        │   ├── terraform.tfvars
-        │   └── variables.tf
-        └── prod
-            ├── backend.tf
-            ├── bastion_ssh_key
-            │   ├── prod-use1-bastion-key
-            │   └── prod-use1-bastion-key.pub
-            ├── cloudfront_functions
-            │   └── cloudfront_function.js
-            ├── lambda_functions
-            │   ├── lambda_fucntion.py
-            │   └── lambda_function.zip
-            ├── main.tf
-            ├── outputs.tf
-            ├── provider.tf
-            ├── terraform.tfvars
-            └── variables.tf
+    ├── env
+    │   ├── dev
+    │   │   ├── backend.tf
+    │   │   ├── bastion_ssh_key
+    │   │   │   ├── dev-use1-bastion-key
+    │   │   │   └── dev-use1-bastion-key.pub
+    │   │   ├── lambda_functions
+    │   │   │   ├── lambda_fucntion.py
+    │   │   │   └── lambda_function.zip
+    │   │   ├── main.tf
+    │   │   ├── outputs.tf
+    │   │   ├── provider.tf
+    │   │   ├── terraform.tfvars
+    │   │   └── variables.tf
+    │   └── prod
+    │       ├── backend.tf
+    │       ├── bastion_ssh_key
+    │       │   ├── prod-use1-bastion-key
+    │       │   └── prod-use1-bastion-key.pub
+    │       ├── cloudfront_functions
+    │       │   └── cloudfront_function.js
+    │       ├── lambda_functions
+    │       │   ├── lambda_fucntion.py
+    │       │   └── lambda_function.zip
+    │       ├── main.tf
+    │       ├── outputs.tf
+    │       ├── provider.tf
+    │       ├── terraform.tfvars
+    │       └── variables.tf
+    └── Jenkinsfile
 ```
