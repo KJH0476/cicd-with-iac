@@ -1,5 +1,6 @@
 # 추가 프로젝트: Terraform IaC 환경 CI/CD 파이프라인 구축
-> **기존 프로젝트:** AWS 기반 글로벌 식당 예약 서비스 🔗[Kyobo-CDA1-9900](https://github.com/KJH0476/Kyobo-CDA1-9900)</br>
+> **기존 프로젝트:** AWS 기반 글로벌 식당 예약 서비스 🔗 [Kyobo-CDA1-9900](https://github.com/KJH0476/Kyobo-CDA1-9900)</br>
+> **IaC 구현 내용 README:** 🔗 [IaC/README.md](https://github.com/KJH0476/cicd-with-iac/tree/main/IaC)</br>
 > **기간:** 2025/04/18 ~ 2025/05/16 (1개월)</br>
 > **인원:** 1명 (개인 프로젝트)
 ---
