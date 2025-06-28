@@ -13,6 +13,11 @@ output "network_private_subnet_ids" {
   description = "Private subnet IDs from the network module."
 }
 
+output "route53_hosted_zone_id" {
+  value       = module.route53.route53_hosted_zone_id
+  description = "Route53 Hosted Zone ID from the common module."
+}
+
 output "common_ecs_cluster_id" {
   value       = module.common.ecs_cluster_id
   description = "ECS Cluster ID from the common module."
@@ -113,12 +118,32 @@ output "lambda_function_arn" {
   description = "Lambda Function ARN from the Lambda module."
 }
 
-output "ecs_services" {
-  value       = { for key, svc in module.ecs : key => svc.ecs_service_name }
-  description = "Map of ECS Service Names from the ECS module."
+output "ecs_auth_sg_id" {
+  value       = module.network.ecs_auth_sg_id
+  description = "Security Group ID for ECS authorization service"
 }
 
-output "ecs_auth_service_name" {
-  value       = module.ecs_auth_service.ecs_service_name
-  description = "ECS Auth Service Name from the ECS Auth Service module."
+output "ecs_user_sg_id" {
+  value       = module.network.ecs_user_sg_id
+  description = "Security Group ID for ECS user service"
+}
+
+output "ecs_noti_sg_id" {
+  value       = module.network.ecs_noti_sg_id
+  description = "Security Group ID for ECS notification service"
+}
+
+output "ecs_search_sg_id" {
+  value       = module.network.ecs_search_sg_id
+  description = "Security Group ID for ECS search service"
+}
+
+output "ecs_resv_sg_id" {
+  value       = module.network.ecs_resv_sg_id
+  description = "Security Group ID for ECS reservation service"
+}
+
+output "ssm_parameter_arns" {
+  value       = module.ssm.ssm_parameter_arns
+  description = "Map of SSM Parameter ARNs from the SSM module."
 }
