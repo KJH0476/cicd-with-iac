@@ -30,7 +30,7 @@ pipeline {
                         def branch_ref = "origin/${env.BRANCH_NAME}"
 
                         def changed = sh(
-                                script: "git diff --name-only ${branch_ref} | grep '^IaC/${path}/' || true",
+                                script: "git diff --name-only ${branch_ref} | grep '^${path}/' || true",
                                 returnStdout: true
                         ).trim()
                         def changedCore = changed.contains('/core/')
