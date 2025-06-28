@@ -27,11 +27,37 @@ pipeline {
                     script {
                         def shortRegion = env.REGION.replaceAll('-', '')
                         def path = "IaC/${shortRegion}/env/${env.ENV_NAME}"
-                        dir(path) {
-                            sh 'terraform init -input=false'
-                            sh 'terraform validate'
-                            sh 'terraform plan'
-                            sh 'terraform apply -auto-approve'
+                        def branch_ref = "origin/${env.BRANCH_NAME}"
+
+                        def changed = sh(
+                                script: "git diff --name-only ${branch_ref} | grep '^IaC/${path}/' || true",
+                                returnStdout: true
+                        ).trim()
+                        def changedCore = changed.contains('/core/')
+                        def changedSvc  = changed.contains('/service/')
+
+                        if(changedCore) {
+                            echo 'core 디렉토리 변경사항 감지됨'
+                            def changedPath = "${path}/core"
+                            dir(changedPath) {
+                                sh 'terraform init -input=false'
+                                sh 'terraform validate'
+                                sh 'terraform plan'
+                                sh 'terraform apply -parallelism=30 -auto-approve'
+                            }
+                        }
+                        if(changedSvc) {
+                            echo 'service 디렉토리 변경사항 감지됨'
+                            def changedPath = "${path}/service"
+                            dir(changedPath) {
+                                sh 'terraform init -input=false'
+                                sh 'terraform validate'
+                                sh 'terraform plan'
+                                sh 'terraform apply -parallelism=30 -auto-approve'
+                            }
+                        }
+                        if(!changedCore && !changedSvc) {
+                            echo '인프라 변경사항 없음'
                         }
                     }
                 }
