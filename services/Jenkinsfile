@@ -74,7 +74,7 @@ pipeline {
                     def devRepo = "dev-${env.REGION_PREFIX}-ecr-repo"
                     def devImgName = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${devRepo}"
 
-                    dir("IaC/${shortRegion}/env/dev/services") {
+                    dir("IaC/${shortRegion}/env/dev/service") {
                         // terraform.tfvars 의 서비스별 image_uri 수정
                         sh """
                             sed -E -i'' -e "/^[ \\t]*${env.SERVICE_NAME}.*[ \\t]*=/,/^[ \\t]*}/ { s#^([ \\t]*)image_uri[ \\t]*=.*#\\1image_uri = \\"${devImgName}:${env.IMAGE_TAG}\\"# }" terraform.tfvars
@@ -150,7 +150,7 @@ pipeline {
                             docker push ${prodImgName}:${env.IMAGE_TAG}
                         """
 
-                        dir("IaC/${shortRegion}/env/prod/services") {
+                        dir("IaC/${shortRegion}/env/prod/service") {
                             // terraform.tfvars 의 서비스별 image_uri 수정
                             sh """
                                 sed -E -i'' -e "/^[ \\t]*${env.SERVICE_NAME}.*[ \\t]*=/,/^[ \\t]*}/ { s#^([ \\t]*)image_uri[ \\t]*=.*#\\1image_uri = \\"${prodImgName}:${env.IMAGE_TAG}\\"# }" terraform.tfvars
