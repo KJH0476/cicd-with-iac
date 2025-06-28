@@ -78,6 +78,7 @@ public class AuthorizationFilter extends AbstractGatewayFilterFactory<Authorizat
             MDC.put("requestUri", path);
 
             if (path.equals("/health")) {
+                log.info("Health Checking...");
                 exchange.getResponse().setStatusCode(HttpStatus.OK);
                 return exchange.getResponse().writeWith(
                         Mono.just(exchange.getResponse()
